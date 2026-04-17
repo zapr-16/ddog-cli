@@ -1,0 +1,99 @@
+name: Rust Build Matrix
+
+on:
+  workflow_call:
+    inputs:
+      artifact-name-prefix:
+        description: Prefix for uploaded artifact names.
+        required: true
+        type: string
+      package-release-archive:
+        description: Package tar.gz release archives instead of raw binaries.
+        required: false
+        type: boolean
+        default: false
+      version:
+        description: Release version used in packaged archive names.
+        required: false
+        type: string
+        default: ""
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: macos-13
+            target: x86_64-apple-darwin
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Validate release packaging inputs
+        if: inputs.package-release-archive
+        shell: bash
+        run: |
+          if [[ -z "${{ inputs.version }}" ]]; then
+            echo "The version input is required when package-release-archive is true." >&2
+            exit 1
+          fi
+
+      - name: Build
+        run: cargo build --locked --release --target ${{ matrix.target }}
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+      - name: Package release archive
+        if: inputs.package-release-archive
+        shell: bash
+        run: |
+          version="${{ inputs.version }}"
+          package_dir="dist/ddog-${version}-${{ matrix.target }}"
+          archive="ddog-${version}-${{ matrix.target }}.tar.gz"
+
+          mkdir -p "$package_dir"
+          cp "target/${{ matrix.target }}/release/ddog" "$package_dir/"
+          cp README.md LICENSE "$package_dir/"
+
+          tar -C dist -czf "dist/${archive}" "ddog-${version}-${{ matrix.target }}"
+          (
+            cd dist
+            shasum -a 256 "${archive}" > "${archive}.sha256"
+          )
+
+      - name: Upload packaged artifacts
+        if: inputs.package-release-archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact-name-prefix }}-${{ matrix.target }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+
+      - name: Upload binary
+        if: ${{ !inputs.package-release-archive }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact-name-prefix }}-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/ddog
