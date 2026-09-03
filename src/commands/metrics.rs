@@ -175,7 +175,11 @@ fn summarize_series(result: &Value) -> Vec<Value> {
                 Some(pts) if !pts.is_empty() => {
                     let values: Vec<f64> = pts
                         .iter()
-                        .filter_map(|p| p.as_array().and_then(|arr| arr.get(1)).and_then(|v| v.as_f64()))
+                        .filter_map(|p| {
+                            p.as_array()
+                                .and_then(|arr| arr.get(1))
+                                .and_then(|v| v.as_f64())
+                        })
                         .collect();
 
                     if values.is_empty() {

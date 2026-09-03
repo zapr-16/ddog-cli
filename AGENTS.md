@@ -53,7 +53,12 @@ cargo test                     # run all tests
 - `DD_SITE` — Optional. Defaults to `datadoghq.com`. Use `datadoghq.eu` for EU.
 
 ## Tech Debt
+
+- The column lists for `hosts`, `incidents`, `synthetics`, `notebooks`, `services` and `downtimes` have never been checked against real API responses — none are captured (the app key in use gets 403 on several of those endpoints). Of the four that could be verified against saved responses (logs, spans, monitors, dashboards), all are correct. A wrong path renders `-` and nothing more, so these are latent rather than visibly broken.
+- `Format::Json` ignores the `columns` argument entirely. If JSON ever honours it, an unverified or wrong column path stops being cosmetic and becomes a permanent `null` field in the default output.
 - The `unsupported-commands` feature in Cargo.toml is a no-op and can be removed
+
+Invariant to preserve: `columns` is consumed only by the `Format::Table` branch of `print_output`/`print_object`, so a JSON-only test cannot catch a path that never resolves. Every column list needs table-path coverage asserting each column resolves on every row.
 
 ## Adding a New Command
 1. Create `src/commands/<resource>.rs`
