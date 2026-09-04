@@ -253,7 +253,7 @@ ddog apm compare --trace-a "abc123" --trace-b "def456"
 ddog apm metrics --query "service:web" --compute avg --metric duration --group-by service
 
 # Discover span tags
-ddog apm tags --query "service:api" --facet http.status_code
+ddog apm tags --query "service:api" --facet @http.status_code
 
 # Show primary APM tag keys for a trace metric
 ddog apm primary-tags --metric trace.http.request.duration

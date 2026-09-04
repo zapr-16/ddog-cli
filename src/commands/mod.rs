@@ -30,14 +30,6 @@ pub(crate) fn require_non_empty(label: &str, value: &str) -> Result<(), String> 
     Ok(())
 }
 
-pub(crate) fn normalize_facet(field: &str) -> String {
-    if field.starts_with('@') {
-        field.to_string()
-    } else {
-        format!("@{field}")
-    }
-}
-
 pub(crate) fn normalize_metric(metric: &str) -> String {
     if metric.starts_with('@') {
         metric.to_string()
@@ -66,9 +58,11 @@ pub(crate) fn aggregate_compute(aggregation: &str, metric: Option<&str>) -> Valu
     compute
 }
 
+/// Facets use Datadog search syntax verbatim: standard attributes and tags are
+/// bare (`service`, `status`, `env`), custom attributes carry `@`.
 pub(crate) fn facet_group(field: &str, limit: u32, sort: Value) -> Value {
     json!({
-        "facet": normalize_facet(field),
+        "facet": field,
         "limit": limit,
         "sort": sort,
     })
