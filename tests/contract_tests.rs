@@ -261,7 +261,7 @@ async fn monitors_search_clamps_per_page_and_includes_sort() {
                     "id": 1,
                     "name": "CPU high",
                     "type": "metric alert",
-                    "overall_state": "Alert",
+                    "status": "Alert",
                     "query": "avg(last_5m):avg:system.cpu.user{*} > 90"
                 }
             ]
@@ -1293,4 +1293,81 @@ async fn api_401_returns_auth_error() {
     let err = result.unwrap_err().to_string();
     assert!(err.contains("401"));
     assert!(err.contains("invalid or expired"));
+}
+
+// ── table columns resolve against real response shapes ────────────────
+
+/// A column that renders `-` on every row is dead: either the field name does
+/// not exist in the response, or the resolver cannot reach it.
+fn assert_no_dead_columns(response: &serde_json::Value, columns: &[&str]) {
+    let rows = ddog::output::extract_rows(response);
+    assert!(!rows.is_empty(), "fixture must contain at least one row");
+    let cells = ddog::output::resolve_cells(&rows, columns);
+    for (i, col) in columns.iter().enumerate() {
+        assert!(
+            cells.iter().any(|row| row[i] != "-"),
+            "column \"{col}\" resolved to \"-\" on every row"
+        );
+    }
+}
+
+#[test]
+fn monitors_search_table_columns_resolve() {
+    let response = json!({
+        "monitors": [
+            {
+                "id": 12345678,
+                "name": "CPU high",
+                "type": "metric alert",
+                "status": "Alert",
+                "query": "avg(last_5m):avg:system.cpu.user{*} > 90",
+                "tags": ["env:prod"],
+                "muted": false
+            },
+            {
+                "id": 87654321,
+                "name": "Latency p95",
+                "type": "query alert",
+                "status": "Alert",
+                "query": "avg(last_10m):p95:trace.http.request{*} > 2",
+                "tags": ["env:prod"],
+                "muted": false
+            }
+        ],
+        "metadata": { "page": 0, "page_count": 2, "per_page": 25, "total_count": 2 }
+    });
+    assert_no_dead_columns(&response, ddog::commands::monitors::SEARCH_COLUMNS);
+}
+
+#[test]
+fn slos_search_table_columns_resolve() {
+    let response = json!({
+        "data": [
+            {
+                "id": "slo-abc",
+                "name": "Web Availability",
+                "type": "metric",
+                "overall_status": [
+                    { "state": "OK", "status": 99.95, "timeframe": "30d", "target": 99.9 }
+                ],
+                "thresholds": [
+                    { "timeframe": "30d", "target": 99.9, "target_display": "99.9" }
+                ],
+                "tags": ["env:prod"]
+            },
+            {
+                "id": "slo-def",
+                "name": "Checkout Latency",
+                "type": "monitor",
+                "overall_status": [
+                    { "state": "Breached", "status": 97.1, "timeframe": "7d", "target": 99.0 }
+                ],
+                "thresholds": [
+                    { "timeframe": "7d", "target": 99.0, "target_display": "99.0" }
+                ],
+                "tags": ["env:prod"]
+            }
+        ]
+    });
+    assert_no_dead_columns(&response, ddog::commands::slos::SEARCH_COLUMNS);
 }

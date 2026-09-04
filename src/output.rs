@@ -23,20 +23,24 @@ pub fn print_table(rows: &[Value], columns: &[&str]) {
 
     let headers: Vec<String> = columns.iter().map(|c| c.to_string()).collect();
     let mut table_data: Vec<Vec<String>> = vec![headers];
-
-    for row in rows {
-        let mut cells = Vec::new();
-        for col in columns {
-            let val = resolve_path(row, col);
-            cells.push(format_cell(&val));
-        }
-        table_data.push(cells);
-    }
+    table_data.extend(resolve_cells(rows, columns));
 
     let table = Table::from_iter(table_data)
         .with(Style::rounded())
         .to_string();
     println!("{table}");
+}
+
+/// Resolve `columns` against each row, producing the formatted table cells.
+pub fn resolve_cells(rows: &[Value], columns: &[&str]) -> Vec<Vec<String>> {
+    rows.iter()
+        .map(|row| {
+            columns
+                .iter()
+                .map(|col| format_cell(&resolve_path(row, col)))
+                .collect()
+        })
+        .collect()
 }
 
 fn resolve_path(value: &Value, path: &str) -> Value {
@@ -45,6 +49,13 @@ fn resolve_path(value: &Value, path: &str) -> Value {
         match current {
             Value::Object(map) => {
                 current = map.get(key).unwrap_or(&Value::Null);
+            }
+            Value::Array(items) => {
+                current = key
+                    .parse::<usize>()
+                    .ok()
+                    .and_then(|i| items.get(i))
+                    .unwrap_or(&Value::Null);
             }
             _ => return Value::Null,
         }
@@ -102,7 +113,7 @@ pub fn count_rows(value: &Value) -> usize {
     extract_rows(value).len()
 }
 
-fn extract_rows(value: &Value) -> Vec<Value> {
+pub fn extract_rows(value: &Value) -> Vec<Value> {
     // Try common Datadog response shapes — only unwrap arrays, not objects
     for key in &[
         "data",
@@ -152,6 +163,46 @@ mod tests {
     fn test_resolve_path_missing() {
         let val = json!({"name": "test"});
         assert_eq!(resolve_path(&val, "missing"), Value::Null);
+    }
+
+    #[test]
+    fn test_resolve_path_array_index() {
+        let val = json!({"thresholds": [{"target": 99.9}, {"target": 95.0}]});
+        assert_eq!(resolve_path(&val, "thresholds.1.target"), json!(95.0));
+    }
+
+    #[test]
+    fn test_resolve_path_array_index_out_of_range() {
+        let val = json!({"thresholds": [{"target": 99.9}]});
+        assert_eq!(resolve_path(&val, "thresholds.5.target"), Value::Null);
+    }
+
+    #[test]
+    fn test_resolve_path_array_nested_object() {
+        let val = json!({"a": [{"b": "hit"}]});
+        assert_eq!(resolve_path(&val, "a.0.b"), json!("hit"));
+    }
+
+    #[test]
+    fn test_resolve_path_numeric_object_key() {
+        let val = json!({"a": {"0": "by-key"}});
+        assert_eq!(resolve_path(&val, "a.0"), json!("by-key"));
+    }
+
+    #[test]
+    fn test_resolve_path_non_numeric_segment_on_array() {
+        let val = json!({"a": [{"b": 1}]});
+        assert_eq!(resolve_path(&val, "a.state"), Value::Null);
+        assert_eq!(resolve_path(&val, "a.-1"), Value::Null);
+    }
+
+    #[test]
+    fn test_resolve_cells_marks_unresolved_columns() {
+        let rows = vec![json!({"id": 1, "status": "Alert"})];
+        assert_eq!(
+            resolve_cells(&rows, &["id", "status", "missing"]),
+            vec![vec!["1", "Alert", "-"]]
+        );
     }
 
     #[test]

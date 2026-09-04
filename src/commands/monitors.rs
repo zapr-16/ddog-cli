@@ -5,6 +5,8 @@ use crate::log;
 use crate::output::{Format, print_output};
 use clap::Args;
 
+pub const SEARCH_COLUMNS: &[&str] = &["id", "name", "type", "status", "query"];
+
 /// Search monitors by status, type, or tags
 ///
 /// Examples:
@@ -57,11 +59,7 @@ pub async fn search(client: &DdClient, args: MonitorsSearch) -> Result<(), DdErr
     }
 
     let result = client.get("/api/v1/monitor/search", &params).await?;
-    let count = print_output(
-        &result,
-        &args.format,
-        &["id", "name", "type", "overall_state", "query"],
-    );
+    let count = print_output(&result, &args.format, SEARCH_COLUMNS);
     log::result_count(count, "monitors");
     Ok(())
 }

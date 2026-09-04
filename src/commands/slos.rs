@@ -7,6 +7,14 @@ use crate::log;
 use crate::output::{Format, print_object, print_output};
 use crate::time;
 
+pub const SEARCH_COLUMNS: &[&str] = &[
+    "id",
+    "name",
+    "type",
+    "overall_status.0.state",
+    "thresholds.0.target",
+];
+
 #[derive(Subcommand)]
 #[command(verbatim_doc_comment)]
 pub enum SlosCmd {
@@ -108,17 +116,7 @@ pub async fn run(client: &DdClient, cmd: SlosCmd) -> Result<(), DdError> {
             }
 
             let result = client.get("/api/v1/slo", &params).await?;
-            let count = print_output(
-                &result,
-                &format,
-                &[
-                    "id",
-                    "name",
-                    "type",
-                    "overall_status.0.state",
-                    "thresholds.0.target",
-                ],
-            );
+            let count = print_output(&result, &format, SEARCH_COLUMNS);
             log::result_count(count, "SLOs");
             Ok(())
         }
