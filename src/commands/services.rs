@@ -2,8 +2,9 @@ use crate::client::DdClient;
 use crate::error::DdError;
 use crate::limits;
 use crate::log;
-use crate::output::{Format, print_output};
+use crate::output::{Format, print_json, print_output};
 use clap::Subcommand;
+use serde_json::{Value, json};
 
 #[derive(Subcommand)]
 #[command(verbatim_doc_comment)]
@@ -111,10 +112,37 @@ pub async fn run(client: &DdClient, cmd: ServicesCmd) -> Result<(), DdError> {
             }
 
             let result = client.get("/api/v1/service_dependencies", &params).await?;
-            print_output(&result, &format, &["service_name", "dependencies"]);
+            if matches!(format, Format::Full) {
+                print_json(&result);
+                return Ok(());
+            }
+            let count = print_output(
+                &Value::Array(dependency_rows(&result)),
+                &format,
+                &["service", "calls"],
+            );
+            log::result_count(count, "services");
             Ok(())
         }
     }
+}
+
+/// The dependencies API returns a map keyed by service name; flatten it into rows.
+fn dependency_rows(result: &Value) -> Vec<Value> {
+    result
+        .as_object()
+        .map(|services| {
+            services
+                .iter()
+                .map(|(name, deps)| {
+                    json!({
+                        "service": name,
+                        "calls": deps.get("calls").cloned().unwrap_or_else(|| json!([])),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -165,5 +193,17 @@ mod tests {
             }
             _ => panic!("expected Deps"),
         }
+    }
+
+    #[test]
+    fn test_dependency_rows_flattens_service_map() {
+        let response = json!({
+            "api": {"calls": ["db", "cache"]},
+            "worker": {}
+        });
+        let rows = dependency_rows(&response);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0], json!({"service": "api", "calls": ["db", "cache"]}));
+        assert_eq!(rows[1], json!({"service": "worker", "calls": []}));
     }
 }

@@ -2,10 +2,14 @@ use crate::client::DdClient;
 use crate::error::DdError;
 use crate::limits;
 use crate::log;
-use crate::output::{Format, print_object, print_output, print_table};
+use crate::output::{Format, print_json, print_object, print_output, print_table};
 use crate::time;
+use chrono::DateTime;
 use clap::Subcommand;
 use serde_json::{Value, json};
+
+/// Time buckets emitted per series in the default JSON output.
+const BINS: usize = 20;
 
 #[derive(Subcommand)]
 #[command(verbatim_doc_comment)]
@@ -115,6 +119,12 @@ pub async fn run(client: &DdClient, cmd: MetricsCmd) -> Result<(), DdError> {
 
             match format {
                 Format::Json => {
+                    let binned = bin_series(&result, BINS);
+                    let count = binned["series"].as_array().map_or(0, Vec::len);
+                    print_json(&binned);
+                    log::result_count(count, "series");
+                }
+                Format::Full => {
                     let count = print_output(&result, &format, &[]);
                     log::result_count(count, "series");
                 }
@@ -156,60 +166,113 @@ pub async fn run(client: &DdClient, cmd: MetricsCmd) -> Result<(), DdError> {
     }
 }
 
+struct Stats {
+    min: f64,
+    max: f64,
+    avg: f64,
+    last: f64,
+}
+
+fn stats(values: &[f64]) -> Option<Stats> {
+    let last = *values.last()?;
+    Some(Stats {
+        min: values.iter().cloned().fold(f64::INFINITY, f64::min),
+        max: values.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+        avg: values.iter().sum::<f64>() / values.len() as f64,
+        last,
+    })
+}
+
+fn series_list(result: &Value) -> &[Value] {
+    result
+        .get("series")
+        .and_then(Value::as_array)
+        .map_or(&[], Vec::as_slice)
+}
+
+/// Pointlist entries as (epoch ms, value), skipping null values.
+fn points(series: &Value) -> Vec<(f64, f64)> {
+    series
+        .get("pointlist")
+        .and_then(Value::as_array)
+        .map(|pts| {
+            pts.iter()
+                .filter_map(|p| {
+                    let arr = p.as_array()?;
+                    Some((arr.first()?.as_f64()?, arr.get(1)?.as_f64()?))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn iso(epoch_ms: f64) -> Value {
+    DateTime::from_timestamp_millis(epoch_ms as i64)
+        .map(|t| json!(t.format("%Y-%m-%dT%H:%M:%SZ").to_string()))
+        .unwrap_or(Value::Null)
+}
+
+/// Collapse each series into at most `bins` time buckets (min/max/avg per bucket)
+/// plus overall stats, instead of the raw pointlist.
+fn bin_series(result: &Value, bins: usize) -> Value {
+    let series: Vec<Value> = series_list(result)
+        .iter()
+        .map(|s| {
+            let pts = points(s);
+            let values: Vec<f64> = pts.iter().map(|p| p.1).collect();
+            let per_bin = pts.len().div_ceil(bins).max(1);
+            let binned: Vec<Value> = pts
+                .chunks(per_bin)
+                .filter_map(|chunk| {
+                    let vals: Vec<f64> = chunk.iter().map(|p| p.1).collect();
+                    let st = stats(&vals)?;
+                    Some(json!({
+                        "ts": iso(chunk[0].0),
+                        "count": chunk.len(),
+                        "min": st.min,
+                        "max": st.max,
+                        "avg": st.avg,
+                    }))
+                })
+                .collect();
+            json!({
+                "metric": s.get("metric"),
+                "scope": s.get("scope"),
+                "expression": s.get("expression"),
+                "unit": s.pointer("/unit/0/short_name"),
+                "from": pts.first().map_or(Value::Null, |p| iso(p.0)),
+                "to": pts.last().map_or(Value::Null, |p| iso(p.0)),
+                "points": pts.len(),
+                "stats": stats(&values).map_or(Value::Null, |st| json!({
+                    "min": st.min, "max": st.max, "avg": st.avg, "last": st.last,
+                })),
+                "bins": binned,
+            })
+        })
+        .collect();
+    json!({ "series": series })
+}
+
 /// Summarize metric series pointlists into table-friendly rows with latest/avg/min/max.
 fn summarize_series(result: &Value) -> Vec<Value> {
-    let empty = vec![];
-    let series = result
-        .get("series")
-        .and_then(|s| s.as_array())
-        .unwrap_or(&empty);
-
-    series
+    series_list(result)
         .iter()
         .map(|s| {
             let metric = s.get("metric").and_then(|v| v.as_str()).unwrap_or("-");
             let scope = s.get("scope").and_then(|v| v.as_str()).unwrap_or("*");
-            let pointlist = s.get("pointlist").and_then(|v| v.as_array());
+            let values: Vec<f64> = points(s).iter().map(|p| p.1).collect();
 
-            match pointlist {
-                Some(pts) if !pts.is_empty() => {
-                    let values: Vec<f64> = pts
-                        .iter()
-                        .filter_map(|p| {
-                            p.as_array()
-                                .and_then(|arr| arr.get(1))
-                                .and_then(|v| v.as_f64())
-                        })
-                        .collect();
-
-                    if values.is_empty() {
-                        return json!({
-                            "metric": metric,
-                            "scope": scope,
-                            "latest": "-",
-                            "avg": "-",
-                            "min": "-",
-                            "max": "-",
-                            "points": 0,
-                        });
-                    }
-
-                    let latest = values.last().copied().unwrap_or(0.0);
-                    let min = values.iter().cloned().fold(f64::INFINITY, f64::min);
-                    let max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-                    let avg = values.iter().sum::<f64>() / values.len() as f64;
-
-                    json!({
-                        "metric": metric,
-                        "scope": scope,
-                        "latest": format!("{latest:.2}"),
-                        "avg": format!("{avg:.2}"),
-                        "min": format!("{min:.2}"),
-                        "max": format!("{max:.2}"),
-                        "points": values.len(),
-                    })
-                }
-                _ => json!({
+            match stats(&values) {
+                Some(st) => json!({
+                    "metric": metric,
+                    "scope": scope,
+                    "latest": format!("{:.2}", st.last),
+                    "avg": format!("{:.2}", st.avg),
+                    "min": format!("{:.2}", st.min),
+                    "max": format!("{:.2}", st.max),
+                    "points": values.len(),
+                }),
+                None => json!({
                     "metric": metric,
                     "scope": scope,
                     "latest": "-",
@@ -271,6 +334,55 @@ mod tests {
         assert_eq!(rows[0]["min"], "10.00");
         assert_eq!(rows[0]["max"], "30.00");
         assert_eq!(rows[0]["points"], 3);
+    }
+
+    #[test]
+    fn test_bin_series_collapses_points_into_bins() {
+        let pointlist: Vec<Value> = (0..40)
+            .map(|i| json!([1_710_000_000_000.0 + i as f64 * 60_000.0, i as f64]))
+            .collect();
+        let response = json!({
+            "series": [{
+                "metric": "system.cpu.user",
+                "scope": "*",
+                "expression": "avg:system.cpu.user{*}",
+                "unit": [{"short_name": "%"}, null],
+                "pointlist": pointlist
+            }]
+        });
+        let out = bin_series(&response, 20);
+        let s = &out["series"][0];
+        assert_eq!(s["metric"], "system.cpu.user");
+        assert_eq!(s["unit"], "%");
+        assert_eq!(s["points"], 40);
+        assert_eq!(s["from"], "2024-03-09T16:00:00Z");
+        assert_eq!(s["stats"]["min"], 0.0);
+        assert_eq!(s["stats"]["max"], 39.0);
+        assert_eq!(s["stats"]["last"], 39.0);
+        let bins = s["bins"].as_array().unwrap();
+        assert_eq!(bins.len(), 20);
+        assert_eq!(
+            bins[0],
+            json!({"ts": "2024-03-09T16:00:00Z", "count": 2, "min": 0.0, "max": 1.0, "avg": 0.5})
+        );
+        assert!(s.get("pointlist").is_none());
+    }
+
+    #[test]
+    fn test_bin_series_fewer_points_than_bins_keeps_one_per_point() {
+        let response =
+            json!({"series": [{"metric": "m", "pointlist": [[0.0, 1.0], [60000.0, 2.0]]}]});
+        let out = bin_series(&response, 20);
+        assert_eq!(out["series"][0]["bins"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_bin_series_empty_pointlist() {
+        let response = json!({"series": [{"metric": "m", "pointlist": []}]});
+        let out = bin_series(&response, 20);
+        assert_eq!(out["series"][0]["points"], 0);
+        assert_eq!(out["series"][0]["stats"], Value::Null);
+        assert_eq!(out["series"][0]["bins"], json!([]));
     }
 
     #[test]

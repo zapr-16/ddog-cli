@@ -17,7 +17,7 @@ cargo test                     # run all tests
 - `src/main.rs` — CLI entry point, clap command definitions
 - `src/client.rs` — HTTP client wrapper (reqwest + DD auth headers)
 - `src/config.rs` — Environment variable loading (DD_API_KEY, DD_APP_KEY, DD_SITE)
-- `src/output.rs` — JSON/table output formatting (stdout for data, stderr for messages)
+- `src/output.rs` — Output formatting: projected JSON (default), raw JSON (`full`), tables; `--max-tokens` budget (stdout for data, stderr for messages)
 - `src/error.rs` — Error types with user-friendly hints (401/403/429 guidance)
 - `src/time.rs` — Time parsing (relative/ISO8601/epoch) with safety range limits
 - `src/limits.rs` — Safety constants (max time ranges, max result counts per resource)
@@ -31,6 +31,8 @@ cargo test                     # run all tests
 - Use `limits::resolve_limit()` for capped result counts and `limits::require_min()` for uncapped page/count validation
 - Every command logs to stderr (query info, result count, pagination hints)
 - Data goes to stdout (JSON or table) — safe for `| jq` piping
+- Default JSON output is projected: `print_output`/`print_object` emit only `columns` per row (keyed by last path segment, full path on collision), compact, under the original wrapper key with `meta`/`metadata` preserved. `--format full` is the raw response. Empty `columns` means pass-through.
+- `--max-tokens` (global flag, default 10000, `0` = off) caps projected JSON by dropping trailing rows and warning on stderr. It is set once from `main` via `output::set_max_tokens`.
 - Shared Datadog payload builders live in `src/commands/mod.rs` (`search_request_body`, `event_search_body`, `aggregate_request_body`, `measure_sort`, etc.)
 - Prefer `output::print_object()` for single-object `data` responses and `output::print_output()` for list responses
 - Each command file has `#[cfg(test)]` clap parsing tests; cross-command request-shape tests live in `tests/contract_tests.rs`
@@ -54,11 +56,10 @@ cargo test                     # run all tests
 
 ## Tech Debt
 
-- The column lists for `hosts`, `incidents`, `synthetics`, `notebooks`, `services` and `downtimes` have never been checked against real API responses — none are captured (the app key in use gets 403 on several of those endpoints). Of the four that could be verified against saved responses (logs, spans, monitors, dashboards), all are correct. A wrong path renders `-` and nothing more, so these are latent rather than visibly broken.
-- `Format::Json` ignores the `columns` argument entirely. If JSON ever honours it, an unverified or wrong column path stops being cosmetic and becomes a permanent `null` field in the default output.
+- The column lists for `hosts`, `incidents`, `synthetics`, `notebooks`, `services` and `downtimes` have never been checked against real API responses — none are captured (the app key in use gets 403 on several of those endpoints). Of the four that could be verified against saved responses (logs, spans, monitors, dashboards), all are correct. Since JSON output is projected, a wrong path there is a `null` field in the default output, not just a `-` cell.
 - The `unsupported-commands` feature in Cargo.toml is a no-op and can be removed
 
-Invariant to preserve: `columns` is consumed only by the `Format::Table` branch of `print_output`/`print_object`, so a JSON-only test cannot catch a path that never resolves. Every column list needs table-path coverage asserting each column resolves on every row.
+Invariant to preserve: `columns` drive both the default JSON output and the table, so a column path that never resolves is a permanent `null` field for every user. Every column list needs coverage asserting each column resolves against a realistic response (see `assert_no_dead_columns` in `tests/contract_tests.rs`). A `Format::Full` run cannot catch it.
 
 ## Adding a New Command
 1. Create `src/commands/<resource>.rs`

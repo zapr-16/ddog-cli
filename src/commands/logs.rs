@@ -234,7 +234,7 @@ pub async fn run(client: &DdClient, cmd: LogsCmd) -> Result<(), DdError> {
             let result = client
                 .post("/api/v2/logs/analytics/aggregate", &body)
                 .await?;
-            print_output(&result, &format, &["buckets", "compute", "group_by"]);
+            print_output(&result, &format, &["data.buckets"]);
             Ok(())
         }
     }

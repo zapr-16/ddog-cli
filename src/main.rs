@@ -15,7 +15,8 @@ use ddog::{client, commands, config, log};
         DD_APP_KEY  — Required. Your Datadog Application key.\n  \
         DD_SITE     — Optional. Defaults to datadoghq.com (use datadoghq.eu for EU).\n\n\
         Time flags accept: relative (15m, 1h, 2d), ISO8601, or Unix epoch.\n\n\
-        Output is JSON by default. Use --format table for human-readable tables.\n\
+        Output is compact JSON with curated columns per row, capped by --max-tokens.\n\
+        Use --format full for the raw API response, --format table for humans.\n\
         Info messages go to stderr, data goes to stdout — safe for piping.",
     after_help = "Examples:\n  \
         ddog logs search --query \"service:web status:error\" --from 1h\n  \
@@ -25,6 +26,10 @@ use ddog::{client, commands, config, log};
         ddog monitors --query \"status:alert\""
 )]
 struct Cli {
+    /// Token budget for JSON output; rows past it are dropped with a warning. 0 disables.
+    #[arg(long, global = true, default_value_t = 10_000, value_name = "N")]
+    max_tokens: usize,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -139,6 +144,7 @@ async fn main() {
     }
 
     let cli = Cli::parse();
+    ddog::output::set_max_tokens(cli.max_tokens);
 
     let config = match config::Config::from_env() {
         Ok(c) => c,

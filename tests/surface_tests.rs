@@ -73,7 +73,7 @@ fn no_args_prints_help_and_exits_successfully() {
     assert!(output.status.success());
 
     let help = String::from_utf8(output.stdout).expect("help output was not valid UTF-8");
-    assert!(help.contains("Usage: ddog <COMMAND>"));
+    assert!(help.contains("Usage: ddog [OPTIONS] <COMMAND>"));
     assert!(help.contains("Commands:"));
 }
 
