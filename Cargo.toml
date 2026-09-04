@@ -1,6 +1,6 @@
 [package]
 name = "ddog"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "A lightweight CLI for querying Datadog — logs, metrics, traces, APM, and more"
 license = "MIT"
