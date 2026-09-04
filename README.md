@@ -273,12 +273,29 @@ ddog apm changes --from 24h
 
 ## Output Formats
 
-By default, output is JSON. Use `--format table` for human-readable tables:
+| `--format` | What you get |
+|---|---|
+| `json` (default) | Compact JSON with a curated set of columns per row (the same ones the table shows), keyed by their short name. The response wrapper (`data`, `monitors`, …) and paging `meta` are preserved. |
+| `full` | The raw API response, compact. Every field, every tag. |
+| `table` | Human-readable table, cells truncated to 80 chars. |
 
 ```bash
+ddog spans --query "service:web"                 # {"data":[{"service":..,"resource_name":..,"duration":..,"status":..,"trace_id":..}],"meta":{..}}
+ddog spans --query "service:web" --format full   # raw spans with all attributes and tags
 ddog hosts --format table
-ddog logs search --query "*" --from 15m --format table
 ```
+
+`metrics query` in JSON mode returns up to 20 time buckets per series (`min`/`max`/`avg` each) plus overall stats instead of the raw pointlist; use `--format full` for every point.
+
+### Token budget
+
+JSON output is capped by `--max-tokens` (default 10000, estimated as bytes/3). Rows past the budget are dropped and a warning goes to stderr with the kept/total count. Raise it or disable it with `0`:
+
+```bash
+ddog logs search --query "status:error" --limit 200 --max-tokens 0
+```
+
+The budget does not apply to `--format full` or `--format table`.
 
 Info/warning messages go to **stderr**, data goes to **stdout** — safe for `| jq` piping.
 
