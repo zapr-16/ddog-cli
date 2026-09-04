@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/zapr-16/ddog-cli/compare/v0.1.0...v0.1.1) - 2026-09-04
+
+### Fixed
+
+- resolve dead table columns and close the CI gaps that hid them ([#2](https://github.com/zapr-16/ddog-cli/pull/2))
+
 ## [0.1.0](https://github.com/zapr-16/ddog-cli/releases/tag/v0.1.0) - 2026-04-17
 
 ### Other
