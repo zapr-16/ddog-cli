@@ -112,7 +112,7 @@ async fn apm_metrics_sends_aggregate_envelope() {
                 "attributes": {
                     "compute": [{ "aggregation": "avg", "metric": "@duration" }],
                     "group_by": [{
-                        "facet": "@service",
+                        "facet": "service",
                         "limit": 25,
                         "sort": {
                             "type": "measure",
@@ -158,7 +158,7 @@ async fn logs_analyze_group_by_uses_measure_sort() {
                 "metric": "@duration"
             }],
             "group_by": [{
-                "facet": "@service",
+                "facet": "service",
                 "limit": 10,
                 "sort": {
                     "type": "measure",
@@ -576,7 +576,7 @@ async fn apm_aggregate_body_has_data_type_attributes() {
                     "filter": { "query": "*" },
                     "compute": [{ "aggregation": "pc99", "metric": "@duration" }],
                     "group_by": [{
-                        "facet": "@resource_name",
+                        "facet": "resource_name",
                         "limit": 25,
                         "sort": {
                             "type": "measure",
@@ -619,7 +619,7 @@ async fn apm_tags_body_uses_measure_sort_for_count() {
                 "attributes": {
                     "compute": [{ "aggregation": "count" }],
                     "group_by": [{
-                        "facet": "@service",
+                        "facet": "service",
                         "limit": 100,
                         "sort": {
                             "type": "measure",
@@ -665,7 +665,7 @@ async fn apm_latency_tags_body_uses_measure_sort_for_avg() {
                         { "aggregation": "count" }
                     ],
                     "group_by": [{
-                        "facet": "@region",
+                        "facet": "region",
                         "limit": 50,
                         "sort": {
                             "type": "measure",

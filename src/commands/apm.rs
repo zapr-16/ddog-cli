@@ -172,7 +172,8 @@ pub enum ApmCmd {
         #[arg(long, default_value = "duration")]
         metric: String,
 
-        /// Group by fields (repeatable: --group-by service --group-by resource_name)
+        /// Group by facets, Datadog syntax: standard attributes and tags bare (service, env),
+        /// custom attributes with @ (@http.status_code). Repeatable.
         #[arg(long)]
         group_by: Vec<String>,
 
@@ -184,12 +185,12 @@ pub enum ApmCmd {
     /// Discover available span tag keys and their top values
     ///
     /// Examples:
-    ///   ddog apm tags --facet http.status_code
+    ///   ddog apm tags --facet @http.status_code
     ///   ddog apm tags --query "service:api" --facet resource_name
     #[command(
         long_about = None,
         next_line_help = false,
-        after_help = "Examples:\n  ddog apm tags --facet http.status_code\n  ddog apm tags --query \"service:api\" --facet resource_name"
+        after_help = "Examples:\n  ddog apm tags --facet @http.status_code\n  ddog apm tags --query \"service:api\" --facet resource_name"
     )]
     Tags {
         /// Span query to scope tag discovery
@@ -204,7 +205,8 @@ pub enum ApmCmd {
         #[arg(long)]
         to: Option<String>,
 
-        /// Tag facet to discover values for (e.g., "service", "http.status_code")
+        /// Facet to discover values for: standard attributes and tags bare ("service", "env"),
+        /// custom attributes with @ ("@http.status_code")
         #[arg(long, default_value = "service")]
         facet: String,
 
@@ -320,7 +322,7 @@ pub enum ApmCmd {
         #[arg(long)]
         to: Option<String>,
 
-        /// Group by field (e.g., "service", "resource_name")
+        /// Group by facet: standard attributes bare ("service", "resource_name"), custom with @
         #[arg(long, default_value = "resource_name")]
         group_by: String,
 
@@ -352,7 +354,7 @@ pub enum ApmCmd {
         #[arg(long)]
         to: Option<String>,
 
-        /// Tag to analyze (e.g., "region", "http.status_code", "version")
+        /// Tag or facet to analyze: tags bare ("region", "version"), custom attributes with @ ("@http.status_code")
         #[arg(long)]
         tag: String,
 

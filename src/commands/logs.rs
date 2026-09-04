@@ -1,5 +1,5 @@
 use crate::client::DdClient;
-use crate::commands::{measure_sort, normalize_facet, normalize_metric};
+use crate::commands::{facet_group, measure_sort, normalize_metric};
 use crate::error::DdError;
 use crate::limits;
 use crate::log;
@@ -60,12 +60,13 @@ pub enum LogsCmd {
     ///
     /// Examples:
     ///   ddog logs analyze --query "status:error" --from 1h --compute count --group-by service
+    ///   ddog logs analyze --query "service:api" --group-by status --group-by @http.status_code
     ///   ddog logs analyze --query "*" --compute avg --metric response_time --group-by host
     ///   ddog logs analyze --query "service:api" --compute pc95 --metric duration --interval 5m
     #[command(
         long_about = None,
         next_line_help = false,
-        after_help = "Examples:\n  ddog logs analyze --query \"status:error\" --from 1h --compute count --group-by service\n  ddog logs analyze --query \"*\" --compute avg --metric response_time --group-by host\n  ddog logs analyze --query \"service:api\" --compute pc95 --metric duration --interval 5m"
+        after_help = "Examples:\n  ddog logs analyze --query \"status:error\" --from 1h --compute count --group-by service\n  ddog logs analyze --query \"service:api\" --group-by status --group-by @http.status_code\n  ddog logs analyze --query \"*\" --compute avg --metric response_time --group-by host\n  ddog logs analyze --query \"service:api\" --compute pc95 --metric duration --interval 5m"
     )]
     Analyze {
         /// Datadog log query
@@ -88,7 +89,8 @@ pub enum LogsCmd {
         #[arg(long)]
         metric: Option<String>,
 
-        /// Group by facet (repeatable: --group-by service --group-by host)
+        /// Group by facet, Datadog syntax: standard attributes and tags bare (status, host, env),
+        /// custom attributes with @ (@http.status_code). Repeatable.
         #[arg(long)]
         group_by: Vec<String>,
 
@@ -212,13 +214,7 @@ pub async fn run(client: &DdClient, cmd: LogsCmd) -> Result<(), DdError> {
 
             let groups: Vec<serde_json::Value> = group_by
                 .iter()
-                .map(|g| {
-                    json!({
-                        "facet": normalize_facet(g),
-                        "limit": 10,
-                        "sort": measure_sort(&compute, metric_ref)
-                    })
-                })
+                .map(|g| facet_group(g, 10, measure_sort(&compute, metric_ref)))
                 .collect();
 
             let body = json!({
