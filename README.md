@@ -1,313 +1,87 @@
 # ddog
 
-A lightweight CLI for querying Datadog — logs, metrics, traces, APM, and more.
-
-Built as a fast, single-binary alternative to the Datadog MCP Server, `ddog` talks directly to the Datadog REST API and works on macOS and Linux.
+A single-binary CLI for querying Datadog — logs, metrics, traces, APM, monitors and more — built as a lighter alternative to the Datadog MCP Server. It talks to the Datadog REST API directly and runs on macOS and Linux.
 
 ## Install
 
-### From GitHub Releases
-
-Each `v*` tag publishes prebuilt archives for macOS and Linux to GitHub Releases. Download the asset for your target and unpack it:
+Prebuilt archives for macOS and Linux are attached to every [GitHub Release](../../releases):
 
 ```bash
 tar -xzf ddog-<version>-<target>.tar.gz
 ./ddog --help
 ```
 
-### From source (requires Rust)
+Or build it yourself with Rust:
+
 ```bash
 cargo install --path .
 ```
 
-### Build from source
-```bash
-git clone https://github.com/<you>/dd-cli.git
-cd dd-cli
-cargo build --release
-# Binary at ./target/release/ddog
-```
-
-### Coverage
-
-Install the local coverage tool once:
-
-```bash
-cargo install cargo-llvm-cov
-```
-
-Then run:
-
-```bash
-cargo coverage
-```
-
-That writes an HTML report to:
-
-```bash
-target/llvm-cov/html/index.html
-```
-
-For a terminal-only summary:
-
-```bash
-cargo coverage-summary
-```
-
 ## Setup
-
-Export your Datadog credentials:
 
 ```bash
 export DD_API_KEY="your-api-key"
 export DD_APP_KEY="your-app-key"
-
-# Optional: for EU or other regions (default: datadoghq.com)
-export DD_SITE="datadoghq.eu"
+export DD_SITE="datadoghq.eu"   # optional, default datadoghq.com
 ```
 
-## Usage
+## Quick start
 
 ```bash
-ddog --help
-```
-
-### Logs
-
-```bash
-# Search logs from the last hour
 ddog logs search --query "service:web status:error" --from 1h
-
-# Search logs with table output
-ddog logs search --query "service:api" --from 30m --format table
-
-# Aggregate logs — count errors by service
-ddog logs analyze --query "status:error" --from 1h --compute count --group-by service
-```
-
-### Metrics
-
-```bash
-# Query a metric timeseries
-ddog metrics query --query "avg:system.cpu.user{host:myhost}" --from 2h
-
-# Get metric metadata
-ddog metrics context --name system.cpu.user
-
-# List available metrics
-ddog metrics search
-
-# Filter metrics by tags
-ddog metrics search --tag env:production service:web
-```
-
-### Monitors
-
-```bash
-# Find alerting monitors
+ddog logs analyze --query "status:error" --from 1h --group-by service
+ddog metrics query --query "avg:system.cpu.user{*}" --from 2h
 ddog monitors --query "status:alert"
-
-# Search by type and tag
-ddog monitors --query "type:metric tag:env:prod"
-```
-
-### Hosts
-
-```bash
-# List all hosts
-ddog hosts
-
-# Filter by name or tag
-ddog hosts --filter "web"
-```
-
-### Dashboards
-
-```bash
-# List dashboards
-ddog dashboards
-
-# Filter by title
-ddog dashboards --filter "production"
-```
-
-### Traces
-
-```bash
-# Get all spans for a trace
-ddog traces --trace-id "1234567890abcdef"
-```
-
-### Spans
-
-```bash
-# Search spans with errors
 ddog spans --query "service:web @http.status_code:500" --from 1h
-```
-
-### Services
-
-```bash
-# List service catalog
-ddog services search
-
-# Get service dependencies
-ddog services deps --env production
-```
-
-### Events
-
-```bash
-# Search events from the last 6 hours
-ddog events --query "source:deploy" --from 6h
-
-# Search alert events
-ddog events --query "source:monitor status:alert" --from 24h
-```
-
-### RUM (Real User Monitoring)
-
-```bash
-# Search RUM events
-ddog rum --query "@type:action" --from 1h
-
-# Search errors in a specific app
-ddog rum --query "@application.name:myapp @type:error" --from 30m --format table
-```
-
-### SLOs
-
-```bash
-# List SLOs
-ddog slos search
-
-# Search SLOs by query
-ddog slos search --query "service:web" --limit 50
-
-# Get SLO details
-ddog slos get --id "abc123def456"
-
-# Get SLO history over the last 30 days
-ddog slos history --id "abc123def456" --from 30d
-```
-
-### Downtimes
-
-```bash
-# List active downtimes
-ddog downtimes list
-
-# List all downtimes (including expired)
-ddog downtimes list --current-only false
-
-# Get downtime details
-ddog downtimes get --id "dt-abc123"
-```
-
-### Synthetics
-
-```bash
-# List synthetic tests
-ddog synthetics list
-
-# Get test results
-ddog synthetics results --id "abc-xyz-123" --from 6h
-```
-
-### Incidents
-
-```bash
-# Search active incidents
-ddog incidents search --query "state:active"
-
-# Get incident details
-ddog incidents get --id "abc123"
-```
-
-### Notebooks
-
-```bash
-# Search notebooks
-ddog notebooks search --query "postmortem"
-
-# Get notebook by ID
-ddog notebooks get --id 12345
-```
-
-### APM Deep Analysis
-
-```bash
-# Search APM spans
-ddog apm spans --query "service:api" --from 1h
-
-# Explore a trace
-ddog apm trace --trace-id "abc123"
-
-# Generate trace summary
-ddog apm summary --trace-id "abc123"
-
-# Compare two traces
-ddog apm compare --trace-a "abc123" --trace-b "def456"
-
-# Analyze trace metrics by service
-ddog apm metrics --query "service:web" --compute avg --metric duration --group-by service
-
-# Discover span tags
-ddog apm tags --query "service:api" --facet @http.status_code
-
-# Show primary APM tag keys for a trace metric
-ddog apm primary-tags --metric trace.http.request.duration
-
-# Find latency bottlenecks
 ddog apm bottlenecks --query "service:api" --from 1h
-
-# Analyze latency by tag
-ddog apm latency-tags --query "service:api" --tag region
-
-# Search Watchdog anomalies
-ddog apm watchdog --from 24h
-
-# Search deployment changes
-ddog apm changes --from 24h
+ddog hosts --format table
 ```
 
-## Output Formats
+Every command has `--help` with examples. Time flags accept relative (`15m`, `2h`, `3d`), ISO 8601 or Unix epoch values.
+
+## Output
 
 | `--format` | What you get |
 |---|---|
-| `json` (default) | Compact JSON with a curated set of columns per row (the same ones the table shows), keyed by their short name. The response wrapper (`data`, `monitors`, …) and paging `meta` are preserved. |
+| `json` (default) | Compact JSON, one curated set of columns per row (the same ones the table shows), keyed by short name. The response wrapper (`data`, `monitors`, …) and paging `meta` are kept. |
 | `full` | The raw API response, compact. Every field, every tag. |
 | `table` | Human-readable table, cells truncated to 80 chars. |
 
 ```bash
 ddog spans --query "service:web"                 # {"data":[{"service":..,"resource_name":..,"duration":..,"status":..,"trace_id":..}],"meta":{..}}
 ddog spans --query "service:web" --format full   # raw spans with all attributes and tags
-ddog hosts --format table
 ```
 
-`metrics query` in JSON mode returns up to 20 time buckets per series (`min`/`max`/`avg` each) plus overall stats instead of the raw pointlist; use `--format full` for every point.
+`metrics query` returns up to 20 time buckets per series (`min`/`max`/`avg`) plus overall stats instead of the raw pointlist; `--format full` gives every point.
 
-### Token budget
+JSON output is capped by `--max-tokens` (default 10000, estimated as bytes/3). Rows past the budget are dropped and stderr says how many were kept. `--max-tokens 0` disables it. The cap does not apply to `full` or `table`.
 
-JSON output is capped by `--max-tokens` (default 10000, estimated as bytes/3). Rows past the budget are dropped and a warning goes to stderr with the kept/total count. Raise it or disable it with `0`:
+Data goes to **stdout**, messages to **stderr**, so `| jq` works.
 
-```bash
-ddog logs search --query "status:error" --limit 200 --max-tokens 0
-```
+### Tokens per call, compared to the Datadog MCP Server
 
-The budget does not apply to `--format full` or `--format table`.
+Measured on 2026-09-04 against a production Datadog org, same query on both sides, MCP tools called with their defaults, counted with `@anthropic-ai/tokenizer`:
 
-Info/warning messages go to **stderr**, data goes to **stdout** — safe for `| jq` piping.
+| Query | `ddog --format full` | `ddog` (default) | Datadog MCP |
+|---|---:|---:|---:|
+| Logs, 50 rows requested | 123,548 | 10,029 (11 rows kept by the budget) | 6,073 (4 rows) |
+| Metric timeseries, 2h | 5,555 | 1,218 | 1,349 |
+| Monitors in alert, 25 rows | 14,781 | 2,554 | 11,525 (39 rows) |
+| Spans, 50 rows | 70,744 | 5,630 | 14,608 (12 rows) |
+| Dashboards, 2 rows | 360 | 137 | 115 |
+| **Total** | **215,093** | **19,656** | **33,699** |
 
-## Safety Limits
+Per row the two cost about the same: neither encodes better, both save tokens by returning fewer fields and fewer rows. The default output gives `ddog` the same knobs the MCP ships with (curated columns, a token budget, a way to ask for everything) while returning more rows for the same budget. Details and raw outputs in `BENCHMARK.md`.
 
-Built-in limits prevent accidentally huge API requests:
+## Safety limits
 
-| Resource | Max Time Range | Max Results |
+Built-in caps stop accidental huge requests. The CLI rejects anything past them with a clear error.
+
+| Resource | Max time range | Max results |
 |---|---|---|
 | Logs search | 24h | 1,000 |
 | Log analytics | 7 days | — |
-| Spans/Traces | 24h | 1,000 |
+| Spans / traces | 24h | 1,000 |
 | Events | 48h | 1,000 |
 | RUM | 24h | 1,000 |
 | Metrics query | 30 days | — |
@@ -316,21 +90,15 @@ Built-in limits prevent accidentally huge API requests:
 | Hosts | — | 1,000 |
 | Dashboards | — | 500 |
 
-```bash
-# This will be rejected with a clear error:
-ddog logs search --from 48h
-# error: Time range too large: 48h requested, max 24h allowed.
-```
-
-## All Commands
+## Commands
 
 | Command | Description |
 |---|---|
 | `ddog logs search` | Search logs with filter query |
-| `ddog logs analyze` | Aggregate/analyze logs (count, avg, sum, etc.) |
+| `ddog logs analyze` | Aggregate logs (count, avg, percentiles) grouped by facet |
 | `ddog metrics query` | Query metric timeseries data |
 | `ddog metrics context` | Get metric metadata (type, unit, tags) |
-| `ddog metrics search` | List configured metrics (optionally filtered by tag) |
+| `ddog metrics search` | List configured metrics, optionally filtered by tag |
 | `ddog events` | Search events (alerts, deploys, changes) |
 | `ddog monitors` | Search monitors |
 | `ddog hosts` | Search monitored hosts |
@@ -341,11 +109,11 @@ ddog logs search --from 48h
 | `ddog services deps` | Get service dependencies |
 | `ddog apm spans` | Search APM spans |
 | `ddog apm trace` | Explore a trace |
-| `ddog apm summary` | Generate trace summary |
+| `ddog apm summary` | Summarize a trace |
 | `ddog apm compare` | Compare two traces |
-| `ddog apm metrics` | Analyze trace metrics |
-| `ddog apm tags` | Discover span tag keys |
-| `ddog apm primary-tags` | Get primary tag keys |
+| `ddog apm metrics` | Aggregate span metrics |
+| `ddog apm tags` | Discover span tag values (`--facet @http.status_code`) |
+| `ddog apm primary-tags` | Get primary tag keys of a trace metric |
 | `ddog apm watchdog` | Search Watchdog stories |
 | `ddog apm changes` | Search change/deploy events |
 | `ddog apm bottlenecks` | Find latency bottlenecks |
@@ -365,13 +133,11 @@ ddog logs search --from 48h
 
 ## Development
 
-Useful local checks:
-
 ```bash
 cargo fmt --check
-cargo test
-cargo test --all-features
 cargo clippy --all-targets --all-features -- -D warnings
+cargo test
+cargo coverage            # HTML report in target/llvm-cov/html (needs cargo-llvm-cov)
 ```
 
 ## License
